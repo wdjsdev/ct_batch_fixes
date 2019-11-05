@@ -1,89 +1,111 @@
-//this is a batch script for replacing elements
-//in converted template files, provided they all
-//share the same fill color. For example,
-//jock tags and collar info. the script loops through
-//each prepress layer and selects everything of a given
-//fill color, then replaces the selection with a matching
-//named group from the "source file", then matches the position
-//and removes the existing item.
-
-//requirements:
-	//a source document that contains items that are named
-		//with the corresponding size and then a label
-		//i.e. "XL Jock Tag"
-
-
+#target Illustrator
 function updateCTElements()
 {
+
+	//this is an array of colors to delete from the current batch doc
+	//let's say you're replacing Thru-cut and SEW LINE...
+	//put both of those colors in this array and they will
+	//be deleted from the batch document.
+	//the source doc should have all colors removed except
+	//for what's being replaced.. so in each piece group,
+	//the only stuff left will be what's getting replaced.
+	
+	var rmColors = ["Thru-cut"];
+
+
+
+
+
 	var valid = true;
 	eval("#include \"/Volumes/Customization/Library/Scripts/Script Resources/Data/Utilities_Container.jsxbin\"");
 	eval("#include \"/Volumes/Customization/Library/Scripts/Script Resources/Data/Batch_Framework.jsxbin\"");
-	function fixElements(sourceDoc,swatchName,elementName)
+	
+	var obj = {};
+
+	try
+	{
+		var sourceDoc = app.documents["ct_fixed.ai"];
+	}
+	catch(e)
+	{
+		alert("where's your source doc, fool?");
+		return false;
+	}
+
+	sourceDoc.activate();
+	var sourcePrepressLay = getPPLay(sourceDoc.layers[0]);
+	sourcePrepressLay.visible = true;
+	sourcePrepressLay.locked = false;
+
+	var tmpLay = sourceDoc.layers.add();
+	var tmpGroup = tmpLay.groupItems.add();
+
+	var curLay,curSize,curPiece,curName,curPos;
+	for(var s=0,len=sourcePrepressLay.layers.length;s<len;s++)
+	{
+		curLay = sourcePrepressLay.layers[s];
+		curSize = curLay.name;
+		// obj[curSize] = {};
+		for(var p=0,pLen=curLay.pageItems.length;p<pLen;p++)
+		{
+			curPiece = curLay.pageItems[p].duplicate(tmpGroup);
+			// curName = curPiece.name;
+			// obj[curSize][curName] = curPiece;
+
+		}
+	}
+
+
+	function exec()
 	{
 		var docRef = app.activeDocument;
 		var layers = docRef.layers;
-		var aB = docRef.artboards;
 		var swatches = docRef.swatches;
-
-
-		var mockLay = findSpecificLayer(layers[0],"Mockup");
-		mockLay.visible = false;
-		var infoLay = findSpecificLayer(layers[0],"Information");
-		infoLay.visible = false;
 		var ppLay = getPPLay(layers);
 		ppLay.visible = true;
-
+		ppLay.locked = false;
 		docRef.selection = null;
 
-
-		for(var x=0,len=ppLay.layers.length;x<len;x++)
+		for(var c=0,len=rmColors.length;c<len;c++)
 		{
-			ppLay.layers[x].visible = false;
-		}
-
-
-		var curSel,curSize,newElement;
-		for(var x=0,len = ppLay.layers.length;x<len;x++)
-		{
-			ppLay.layers[x].visible = true;
-			curSize = ppLay.layers[x].name;
-			docRef.defaultFillColor = swatches[swatchName].color;
+			docRef.defaultFillColor = swatches[rmColors[c]].color;
 			app.executeMenuCommand("Find Fill Color menu item");
-			app.executeMenuCommand("group");
-			curSel = docRef.selection[0];
-			newElement = sourceDoc.pageItems[curSize + " " + elementName];
-			newElement = newElement.duplicate(docRef);
-			newElement.moveToBeginning(curSel.parent);
-			newElement.position = curSel.position;
-			newElement.name = curSize + " " + elementName;
-			curSel.remove();
-			docRef.selection = null;
-			ppLay.layers[x].visible = false;
+			app.cut();
+			docRef.defaultStrokeColor = swatches[rmColors[c]].color;
+			app.executeMenuCommand("Find Stroke Color menu item"); 
+			app.cut();
 		}
 
-		for(var x=0,len=ppLay.layers.length;x<len;x++)
+		//bring in the tmpGroup
+		var curTmpGroup = tmpGroup.duplicate(docRef);
+
+		var curLay,curSize,curPiece,curName,curPos;
+		for(var s=0,len=ppLay.layers.length;s<len;s++)
 		{
-			ppLay.layers[x].visible = true;
+			curLay = ppLay.layers[s];
+			curSize = curLay.name;
+			for(var p=0,pLen=curLay.pageItems.length;p<pLen;p++)
+			{
+				curPiece = curLay.pageItems[p];
+				curName = curPiece.name;
+				dupGroup = curTmpGroup.groupItems[curName];
+				for(var dg = dupGroup.pageItems.length - 1; dg>=0; dg--)
+				{
+					dupGroup.pageItems[dg].moveToBeginning(curPiece);
+				}
+				dupGroup.remove();
+				
+			}
 		}
 
-
-		docRef.selection = null;
-		mockLay.visible = true;
 		ppLay.visible = false;
-		
 	}
 
-	var tagFile = app.documents["jock_tags.ai"];
-	var collarInfoFile = app.documents["collar_info.ai"];
+	batchInit(exec,"update thru cut lines");
+	// app.documents[1].activate();
+	// exec();
 
-	function execute()
-	{
-		fixElements(tagFile,"Jock Tag B", "Jock Tag");
-		fixElements(collarInfoFile,"Collar Info B", "Collar Info");
-	}
-
-	// execute();
-
-	batchInit(execute,"fixed jock tags and collar info")
+	tmpLay.remove();
+	
 }
 updateCTElements();
